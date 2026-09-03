@@ -1,104 +1,151 @@
 # NetLab
 
-Browser-based IPv4 network simulation lab for the WebMCP Challenge.
+NetLab is a browser-based, agent-native IPv4 network lab where people and compatible AI agents inspect, troubleshoot, and modify the same deterministic simulation state.
 
-NetLab lets a human build a small topology of PCs and routers, configure addresses and static routes, and run deterministic ping/trace simulation against that live lab state. The same application actions are designed so a compatible AI agent can later inspect and interact with the exact same simulator through WebMCP.
+[**Live Demo**](https://web-mcp-challenge.vercel.app/) · [**Demo Video**](https://youtu.be/VaqwLiFAb6g)
 
-This repository currently ships the **human lab, simulation engine, and WebMCP tools** that share the same Zustand snapshot. Compatible agents can inspect live topology, inspect one device, run the same deterministic ping the human uses, add or remove a static route, and highlight a device on the canvas. Agents cannot add or delete devices, change interfaces, or load presets.
+![NetLab and ChatGPT verifying a static-route repair through WebMCP](screenshots/Screenshot%202026-09-03%20230450.png)
 
-## Motivation
+## What is NetLab?
 
-Most “network labs in the browser” are either visual mockups or full packet emulators. NetLab sits in between: a focused Layer-3 logic simulator that is small enough to reason about, deterministic enough to test, and structured enough that an external agent can later share the human’s live topology instead of inventing its own.
+Network simulators let people experiment with addressing and routing without physical hardware. Troubleshooting usually means reading a topology, checking interface addresses and gateways, following route-table decisions, and testing both directions of a connection.
 
-The long-term idea is simple: if a human and an AI agent look at the same lab, they should see the same devices, the same routes, and the same ping result.
+NetLab provides that workflow as a focused, client-side Layer 3 lab. A human can build a topology of PCs and routers, connect devices, configure IPv4 interfaces and static routes, load working or broken examples, and inspect hop-by-hop connectivity results.
 
-## What currently works
+The project also asks a more specific question: what changes when an AI agent can participate directly in the same live simulator? Through WebMCP, NetLab exposes structured topology, device state, deterministic diagnostics, visual guidance, and narrowly scoped route actions to compatible agents.
 
-- React Flow topology canvas for PCs, routers, and links
-- Device inspector for names, IPv4/CIDR, default gateways, and static routes
-- Client-side lab state (Zustand) as the single source of truth
-- Deterministic IPv4 / CIDR / static-routing simulation engine
-- Ping with bidirectional reachability checks
-- Packet traces with hop-by-hop forwarding decisions
-- Two real presets: a working static-routing lab and a broken challenge lab
-- Application actions (`addDevice`, `runPing`, `configureInterface`, …) reused by the UI and by WebMCP tools
-- WebMCP tools: `get_topology`, `get_device_state`, `test_connectivity`, `add_static_route`, `remove_static_route`, `highlight_device`
+NetLab is not a full network emulator or a replacement for Cisco Packet Tracer. It is a compact environment for learning and reasoning about IPv4 forwarding and static routing.
 
-## Screenshots
+## Why WebMCP?
 
-Add screenshots of the canvas, inspector, and packet trace here after recording a local session.
+Without application-level tools, an agent must reconstruct the lab from presentation details. With WebMCP, it can work with NetLab's domain model directly.
 
-- Topology canvas with PC → Router → Router → PC
-- Inspector showing interface and static-route configuration
-- Packet trace for a successful ping and a dropped return path
+| Traditional browser automation | NetLab with WebMCP |
+| --- | --- |
+| Interprets screenshots or DOM structure | Receives structured devices, links, interfaces, and routes |
+| Locates controls and reads fields individually | Calls explicit, documented network-lab tools |
+| Infers whether a visual result means success | Invokes NetLab's deterministic simulator |
+| Manipulates generic UI elements | Performs validated domain actions through the same application logic as the UI |
 
-## Supported networking scope
+The result is a shared workspace, not a separate agent-side model of the network:
 
-NetLab is a **logical Layer-3 simulator**. It supports:
+> Human sees failed connectivity → agent reads the topology → NetLab simulates the path → agent inspects and highlights the failing router → agent applies a requested route change → NetLab verifies the repair
 
-- PCs and routers
-- Direct physical links
-- IPv4 addresses and CIDR prefixes
-- PC default gateways
-- Directly connected router networks
-- Static routes with longest-prefix matching
-- Logical packet forwarding
-- Ping reachability
-- Packet tracing
+The model can reason about the returned evidence, but it does not decide whether a packet is deliverable. **ChatGPT reasons about the result; NetLab decides whether the network works.**
 
-It does **not** implement:
+![NetLab exposing six domain-specific site tools to ChatGPT](screenshots/Screenshot%202026-09-03%20230539.png)
 
-- IPv6, ARP, DHCP, NAT, VLANs, or switches
-- OSPF, BGP, EIGRP, or Cisco IOS
-- Sockets, virtual machines, or real network packets
-- A backend, embedded chatbot, or agent-driven network editing
+## Demo
 
-If ping succeeds, it is because the engine found a valid forwarding path in **both** directions. The model never decides that.
+[Watch the complete demo on YouTube](https://youtu.be/VaqwLiFAb6g).
+
+The main scenario uses the included **Broken Static Routing Challenge**:
+
+1. Load **Broken lab**.
+2. Ask ChatGPT:
+
+   > PC-01 can't reach PC-02. Use NetLab's site tools to diagnose exactly what's wrong. Don't change anything yet.
+
+3. Ask:
+
+   > Highlight the device I should inspect.
+
+4. Ask:
+
+   > Fix the routing issue and test the connection again.
+
+NetLab reports that the forward path reaches PC-02 but the return path stops at Router-02 with `NO_ROUTE`. The missing route is `192.168.1.0/24` via `10.0.0.1`. After the requested route is added, the simulator runs again and confirms reachability in both directions.
+
+![ChatGPT diagnosing the missing return route and highlighting Router-02](screenshots/Screenshot%202026-09-03%20230437.png)
+
+## WebMCP tools
+
+NetLab intentionally exposes a small set of domain-specific capabilities instead of mirroring every button in the interface.
+
+| Tool | Purpose | Effect |
+| --- | --- | --- |
+| `get_topology` | Read all current devices and physical links. | Read-only; returns stable device, interface, and link IDs. |
+| `get_device_state` | Read the live configuration of one PC or router. | Read-only; returns interfaces, peers, validation issues, gateways, or static routes as applicable. |
+| `test_connectivity` | Run NetLab's deterministic bidirectional connectivity simulation. | Updates the packet-trace and reachability UI; does not change network configuration. |
+| `highlight_device` | Direct the human to a specific device. | Selects the device on the canvas and opens its inspector; configuration is unchanged. |
+| `add_static_route` | Add a validated route to an existing router. | Uses the same route action as the inspector and selects the affected router. |
+| `remove_static_route` | Remove an existing router route by route ID or destination/next-hop pair. | Uses the shared removal action and selects the affected router. |
+
+The write tools do not expose device creation, deletion, linking, interface configuration, gateway changes, or preset loading.
+
+## How WebMCP is implemented
+
+`WebMcpBridge` registers the tools when the client application mounts. This is a real excerpt from [`lib/webmcp/registerTools.ts`](lib/webmcp/registerTools.ts):
+
+```ts
+await modelContext.registerTool(
+  {
+    name: 'get_topology',
+    title: 'Get topology',
+    description:
+      'Inspect the current NetLab topology. Returns every device and physical connection in the live network lab. Use this first when you need to understand which devices exist and how they are connected.',
+    inputSchema: emptyInput,
+    annotations: { readOnlyHint: true },
+    execute: async () => {
+      log('executing get_topology')
+      return getTopology(labApi.getState())
+    },
+  },
+  options,
+)
+```
+
+The other handlers follow the same pattern:
+
+```text
+WebMCP tool → agent-facing adapter → labApi/application action → shared state → simulator and UI
+```
+
+- Read tools serialize the current `labApi` snapshot rather than reading rendered UI.
+- `test_connectivity` calls the existing `runPing` action and returns the simulator's structured result.
+- Route tools validate input, then reuse the same `addStaticRoute` and `removeStaticRoute` actions used by the inspector.
+- `highlight_device` reuses the shared device-selection action.
+- Tool registrations are tied to an `AbortController`, so the client bridge can cleanly unregister them.
+
+There is no parallel agent-only copy of the topology. A route added in the inspector is visible to the next tool call, and a route added through WebMCP appears immediately in the inspector.
+
+## Network simulation engine
+
+The simulator is pure TypeScript and runs entirely in the browser. Given the same topology and configuration, it returns the same result.
+
+Implemented behavior includes:
+
+- strict IPv4 parsing and CIDR-prefix validation
+- subnet and network-address calculations
+- directly connected network selection
+- PC default-gateway validation and resolution
+- router static routes with longest-prefix matching
+- next-hop resolution through a connected interface and neighbor
+- hop-by-hop forward-path tracing
+- independent return-path validation for ping
+- routing-loop detection and a 16-hop limit
+- structured failures such as `NO_DEFAULT_GATEWAY`, `INVALID_GATEWAY`, `NO_ROUTE`, `NEXT_HOP_UNREACHABLE`, `INTERFACE_UNCONFIGURED`, `DESTINATION_UNREACHABLE`, `ROUTING_LOOP`, and `INVALID_CONFIGURATION`
+
+For a PC, the engine first checks whether the destination is local; otherwise it resolves the configured default gateway. For a router, it checks directly connected networks before choosing the best matching static route. A connectivity test succeeds only when both the forward and return traces succeed.
+
+This is logical Layer 3 simulation. It does not claim packet-level timing, operating-system behavior, or protocol fidelity beyond the features listed above.
 
 ## Architecture
 
-```
-UI (React Flow + inspector + trace)
-        │
-        ▼
-Application actions  (lib/lab/actions.ts, lib/lab-store.ts → labApi)
-        │
-        ├── Human UI
-        └── WebMCP tools (lib/webmcp) → same live snapshot
-                │
-                ▼
-Lab snapshot         (devices, links, routes, selection, last ping)
-        │
-        ▼
-Pure simulator       (lib/simulator)
+```mermaid
+flowchart LR
+    Human["Human UI<br/>React Flow, inspector, trace"] --> Actions["Shared application actions"]
+    Agent["Compatible AI agent"] --> Tools["WebMCP tools"]
+    Tools --> Adapters["Agent-facing adapters"]
+    Adapters -->|read snapshot| State["Zustand lab state"]
+    Adapters -->|domain actions| Actions
+    Actions <--> State
+    Actions --> Simulator["Deterministic TypeScript simulator"]
+    Simulator --> Actions
+    State -->|render| Human
 ```
 
-- **Domain types** describe PCs, routers, interfaces, links, static routes, and simulation results.
-- **Lab state** lives in one Zustand store. React Flow nodes/edges are derived from that state, not stored as a second network copy.
-- **Simulation** is pure TypeScript. Given the same snapshot, `tracePacket()` and `runPing()` always return the same result.
-- **Application actions** such as `addDevice()`, `connectDevices()`, `configureInterface()`, `addStaticRoute()`, and `runPing()` are the operations both the UI and WebMCP tools call. WebMCP currently exposes inspection, `runPing()`, static-route add/remove, and device selection. It does not expose device create/delete, linking, interface edits, or presets.
-
-## Simulator design
-
-`tracePacket(sourceDeviceId, destinationDeviceId)` walks a logical packet toward the destination IPv4 address.
-
-On a PC:
-
-1. If the destination is on the local subnet, deliver over the connected link when that neighbor owns the address.
-2. Otherwise use the configured default gateway.
-3. The gateway must be a valid on-link address present on the connected neighbor.
-
-On a router:
-
-1. Deliver if the destination is one of the router’s own addresses.
-2. Otherwise forward on a directly connected network.
-3. Otherwise select a static route with longest-prefix matching, resolve the next hop on a connected interface, and forward over that link.
-
-The engine stops on obvious routing loops or a hop limit, and returns structured failures:
-
-`NO_DEFAULT_GATEWAY`, `INVALID_GATEWAY`, `NO_ROUTE`, `NEXT_HOP_UNREACHABLE`, `INTERFACE_UNCONFIGURED`, `DESTINATION_UNREACHABLE`, `ROUTING_LOOP`, `INVALID_CONFIGURATION`.
-
-`runPing()` traces forward and reverse. Ping succeeds only when both traces succeed.
+React Flow nodes and edges are derived from the domain state; they are not a second copy of the network. The simulator is kept separate from rendering, which makes its routing behavior directly testable under Vitest.
 
 ## Tech stack
 
@@ -106,172 +153,126 @@ The engine stops on obvious routing loops or a hop limit, and returns structured
 - TypeScript
 - React Flow (`@xyflow/react`)
 - Zustand
-- Tailwind CSS
-- Vitest for the domain/simulator tests
-- WebMCP Imperative API (`document.modelContext`) with `@mcp-b/webmcp-types`
+- Tailwind CSS 4
+- WebMCP Imperative API with `@mcp-b/webmcp-types`
+- Vitest
+- Vercel Analytics and Vercel deployment
 
-No backend is required. Everything runs in the browser.
+No backend is required for the lab or simulator.
 
-## Local setup
+## Run locally
+
+The repository includes a pnpm lockfile and workspace configuration.
 
 ```bash
+git clone https://github.com/RealPratham21/WebMCP-Challenge.git
+cd WebMCP-Challenge
 pnpm install
 pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-```bash
-pnpm build
-pnpm start
-```
-
-runs the production build.
-
-## How to use
-
-1. Load **Working lab** or **Broken lab**, or start from a blank canvas with **Reset**.
-2. Add PCs and routers from the palette.
-3. Drag from one device port to another to create a link. Router interfaces are created from those connections.
-4. Select a device and configure it in the inspector.
-   - PC: name, IPv4 address, CIDR prefix, default gateway
-   - Router: per-interface IPv4/CIDR and static routes
-5. Choose a source and destination in the packet trace panel, then click **Run ping**.
-6. The trace shows the hop path. The canvas highlights the devices and links used by the latest simulation.
-
-Invalid IPv4, CIDR, gateway, or next-hop values show inspector errors. The simulator does not invent missing configuration.
-
-## Sample topologies
-
-### Working Static Routing Lab
-
-```
-PC-01 (192.168.1.10/24, gw 192.168.1.1)
-   │
-Router-01
-   eth0 192.168.1.1/24
-   eth1 10.0.0.1/30
-   static: 192.168.2.0/24 via 10.0.0.2
-   │
-Router-02
-   eth0 10.0.0.2/30
-   eth1 192.168.2.1/24
-   static: 192.168.1.0/24 via 10.0.0.1
-   │
-PC-02 (192.168.2.10/24, gw 192.168.2.1)
-```
-
-Ping PC-01 → PC-02 succeeds in both directions:
-
-`PC-01 → Router-01 → Router-02 → PC-02`
-
-### Broken Static Routing Challenge
-
-Same devices and addresses, but Router-02 has **no** return route to `192.168.1.0/24`. The forward path can still work; the return path fails at Router-02 with `NO_ROUTE`. Ping therefore fails. Adding the missing static route makes the lab reachable — the failure comes from the engine, not from a hard-coded “failed” result.
-
-## Project structure
-
-```
-app/                         Next.js app shell and styles
-components/lab-workspace.tsx Human lab UI
-components/device-node.tsx   Canvas device node
-components/webmcp-bridge.tsx Client-only WebMCP registration
-lib/lab-store.ts             Zustand store + labApi action wrappers
-lib/lab/actions.ts           Pure lab mutations and runPing/tracePacket
-lib/lab/flow.ts              Domain → React Flow mapping
-lib/lab/validation.ts        Inspector validation
-lib/simulator/               IPv4, topology, engine, presets
-lib/webmcp/tools.ts          Agent-facing adapters over live lab state
-lib/webmcp/serializers.ts    Compact domain payloads for agents
-lib/webmcp/registerTools.ts  document.modelContext.registerTool lifecycle
-```
-
-## Testing
+Run the test suite:
 
 ```bash
 pnpm test
 ```
 
-Tests cover the pure simulator and lab actions, including:
+Create and serve a production build:
 
-- Same-subnet reachability
-- Valid default gateway
-- Two-router static routing
-- Missing default gateway
-- Missing forward route
-- Missing return route
-- Unreachable next hop
-- Malformed addresses
-- Longest-prefix route selection
-- Disconnected topology
-- Routing loops and hop-limit handling
-- WebMCP topology/device serializers and adapters (read tools plus static-route and highlight write tools that call existing lab actions)
-
-## WebMCP
-
-NetLab progressively exposes its live simulator state to compatible AI agents using the WebMCP Imperative API (`document.modelContext.registerTool`). The human UI and the agent tools read and write through the **same application actions** into the same centralized lab snapshot. If the human or the agent changes a route, the next tool call and the inspector both see that change immediately.
-
-Write tools are limited to static routes and device selection. There are still no tools to add or delete devices, connect links, edit interface addresses, set a default gateway, or load presets.
-
-### Implemented tools
-
-| Tool | Purpose |
-| --- | --- |
-| `get_topology` | Returns every device and physical link in the current lab. Read-only. Use this first. |
-| `get_device_state` | Returns one PC or router’s live configuration (`deviceId` from `get_topology`), including stable static-route IDs. Read-only. |
-| `test_connectivity` | Runs the same deterministic bidirectional ping as **Run ping**. Updates the packet trace UI. Does not change topology or configuration. |
-| `add_static_route` | Adds one static route to an existing router. Use only when the user wants the configuration changed. Same action as the inspector. |
-| `remove_static_route` | Removes one static route by `routeId` (preferred) or `destination` + `nextHop`. Same action as the inspector. |
-| `highlight_device` | Selects a device on the canvas and opens its inspector. Does not change network configuration. |
-
-`test_connectivity` never lets the model decide reachability. It calls the existing simulator through `labApi.runPing()`. `add_static_route` and `remove_static_route` call `labApi.addStaticRoute()` / `labApi.removeStaticRoute()`. `highlight_device` calls `labApi.selectDevice()`.
-
-### Local WebMCP testing
-
-1. Use a WebMCP-capable Chrome version.
-2. Enable `chrome://flags/#enable-webmcp-testing`.
-3. Relaunch Chrome.
-4. Start NetLab locally with `pnpm dev` and open [http://localhost:3000](http://localhost:3000).
-5. In DevTools:
-
-```js
-await document.modelContext.getTools()
+```bash
+pnpm build
+pnpm start
 ```
 
-You should see exactly these six tools (alphabetical): `add_static_route`, `get_device_state`, `get_topology`, `highlight_device`, `remove_static_route`, `test_connectivity`. Then:
+## Testing WebMCP
+
+### ChatGPT
+
+1. Open the [deployed NetLab site](https://web-mcp-challenge.vercel.app/) in ChatGPT's WebMCP-capable in-app browser.
+2. Open **Site tools** and confirm that NetLab exposes six tools.
+3. Ask ChatGPT to inspect or diagnose the live lab using those tools.
+
+The demo prompts above provide a complete read → diagnose → highlight → repair → verify workflow.
+
+### Chrome
+
+1. Open `chrome://flags/#enable-webmcp-testing` in a WebMCP-capable Chrome build.
+2. Enable the flag and relaunch Chrome.
+3. Start NetLab with `pnpm dev` and open [http://localhost:3000](http://localhost:3000).
+4. In DevTools, list the registered tools:
 
 ```js
 const tools = await document.modelContext.getTools()
-const topology = tools.find((t) => t.name === 'get_topology')
-await document.modelContext.executeTool(topology, '{}')
-
-const device = tools.find((t) => t.name === 'get_device_state')
-await document.modelContext.executeTool(device, JSON.stringify({ deviceId: 'pc-1' }))
-
-const ping = tools.find((t) => t.name === 'test_connectivity')
-await document.modelContext.executeTool(
-  ping,
-  JSON.stringify({ sourceDeviceId: 'pc-1', destinationDeviceId: 'pc-2' }),
-)
-
-const highlight = tools.find((t) => t.name === 'highlight_device')
-await document.modelContext.executeTool(highlight, JSON.stringify({ deviceId: 'router-2' }))
-
-const addRoute = tools.find((t) => t.name === 'add_static_route')
-await document.modelContext.executeTool(
-  addRoute,
-  JSON.stringify({ deviceId: 'router-2', destination: '192.168.1.0/24', nextHop: '10.0.0.1' }),
-)
+tools.map((tool) => tool.name)
 ```
 
-Without the flag, NetLab still runs as a normal simulator. Tools are registered only when `document.modelContext` exists.
+Expected set (order may vary):
 
-Agent-driven topology edits (add/delete devices, connect links, change interface IPs) are **not** implemented.
+```js
+[
+  'add_static_route',
+  'get_device_state',
+  'get_topology',
+  'highlight_device',
+  'remove_static_route',
+  'test_connectivity',
+]
+```
 
-## Current limitations
+Invoke the topology tool directly:
 
-- Layer-3 only: no ARP, switching, NAT, DHCP, or dynamic routing
-- One link between a pair of devices; PCs have a single interface
-- Save / Export in the toolbar are visual placeholders
-- No persistence, no multi-user labs, and no packet animation beyond hop highlighting
-- WebMCP cannot add/delete devices, connect links, edit interface IPs, set gateways, or load presets
+```js
+const topology = tools.find((tool) => tool.name === 'get_topology')
+await document.modelContext.executeTool(topology, '{}')
+```
+
+When `document.modelContext` is unavailable, NetLab continues to work as a normal browser-based simulator; it simply does not register agent tools.
+
+## Current scope
+
+### Supported
+
+- PCs and routers
+- point-to-point physical links, with one interface at each endpoint
+- one `eth0` interface per PC with at most one link, plus dynamically allocated router interfaces
+- IPv4 addresses and CIDR prefixes
+- PC default gateways
+- directly connected router networks
+- static routes and longest-prefix selection
+- deterministic forward and return path checks
+- hop-by-hop traces and structured routing failures
+- working and broken static-routing presets
+- live human edits plus the six WebMCP capabilities documented above
+
+### Not currently simulated
+
+- Ethernet switching, ARP, VLANs, or switches
+- DHCP, DNS, NAT, or firewalls
+- dynamic routing protocols such as OSPF, BGP, or EIGRP
+- IPv6
+- Cisco IOS or vendor-specific device behavior
+- real packet I/O, sockets, virtual machines, containers, latency, or bandwidth
+
+NetLab is currently browser-local and single-user. It has no persistence or backend, packet visualization is hop-based rather than animated, and the **Save** and **Export** toolbar buttons are presentational placeholders.
+
+## Project structure
+
+```text
+app/                         Next.js application shell and global styles
+components/                  Canvas, device inspector, trace UI, WebMCP bridge
+lib/lab-store.ts             Shared Zustand store and labApi wrappers
+lib/lab/                     Pure application actions, validation, React Flow mapping
+lib/simulator/               IPv4 utilities, topology helpers, engine, presets, tests
+lib/webmcp/                  Registration, adapters, serializers, result types, tests
+screenshots/                 Submission and workflow images
+```
+
+## Tests
+
+The Vitest suite covers IPv4/CIDR utilities, lab actions, simulator behavior, and the WebMCP adapters. Cases include same-subnet delivery, default-gateway handling, static routing across two routers, longest-prefix matching, missing forward and return routes, unreachable next hops, malformed configuration, disconnected topology, routing loops, the hop limit, live-state serialization, validated route mutations, device highlighting, and repair/rebreak workflows.
+
+## License
+
+This repository does not currently include an open-source license file.
