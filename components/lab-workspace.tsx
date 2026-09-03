@@ -38,6 +38,7 @@ import { formatHopPath } from '@/lib/simulator/engine'
 import { parsePrefixInput } from '@/lib/simulator/ipv4'
 import { BROKEN_STATIC_ROUTING, WORKING_STATIC_ROUTING } from '@/lib/simulator/presets'
 import { DeviceNode } from './device-node'
+import { WebMcpBridge } from './webmcp-bridge'
 
 const nodeTypes = { device: DeviceNode }
 
@@ -436,6 +437,7 @@ export default function LabWorkspace() {
 
   return (
     <main className="lab-shell">
+      <WebMcpBridge />
       <Toolbar />
       <div className="lab-body">
         <Palette />
