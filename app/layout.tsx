@@ -7,20 +7,10 @@ export const metadata: Metadata = {
   description: 'Build, configure, and simulate network topologies in your browser.',
   generator: 'v0.app',
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
+    icon: {
+      url: '/mcp_challenge_logo.jpg',
+      type: 'image/jpeg',
+    },
     apple: '/apple-icon.png',
   },
 }
