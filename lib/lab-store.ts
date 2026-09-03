@@ -114,6 +114,7 @@ export const labApi = {
     useLabStore.getState().addStaticRoute(deviceId, route),
   removeStaticRoute: (deviceId: string, routeId: string) =>
     useLabStore.getState().removeStaticRoute(deviceId, routeId),
+  selectDevice: (deviceId: string | null) => useLabStore.getState().selectDevice(deviceId),
   runPing: (sourceId?: string, destinationId?: string) =>
     useLabStore.getState().runPing(sourceId, destinationId),
   tracePacket: (sourceId: string, destinationId: string) =>

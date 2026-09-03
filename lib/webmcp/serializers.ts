@@ -1,7 +1,15 @@
 import type { LabSnapshot } from '../lab/types'
 import { deviceFieldErrors } from '../lab/validation'
 import { getDevice, getInterfaces, getPrimaryIPv4, neighborOnInterface } from '../simulator/topology'
-import type { Device, HopDecision, Network, NetworkInterface, PingResult, SimulationResult } from '../simulator/types'
+import type {
+  Device,
+  HopDecision,
+  Network,
+  NetworkInterface,
+  PingResult,
+  SimulationResult,
+  StaticRoute,
+} from '../simulator/types'
 import { isPc } from '../simulator/types'
 import type {
   AgentConnectivityResult,
@@ -10,6 +18,7 @@ import type {
   AgentFailure,
   AgentHop,
   AgentInterface,
+  AgentStaticRoute,
   AgentTopology,
 } from './types'
 
@@ -27,6 +36,14 @@ function serializeInterface(network: Network, device: Device, iface: NetworkInte
     connectedTo: neighbor
       ? { deviceId: neighbor.device.id, deviceName: neighbor.device.name }
       : null,
+  }
+}
+
+export function serializeStaticRouteForAgent(route: StaticRoute): AgentStaticRoute {
+  return {
+    id: route.id,
+    destination: route.destinationCidr,
+    nextHop: route.nextHop,
   }
 }
 
@@ -77,10 +94,7 @@ export function serializeDeviceForAgent(snapshot: LabSnapshot, device: Device): 
     name: device.name,
     type: 'router',
     interfaces: device.interfaces.map((iface) => serializeInterface(network, device, iface)),
-    staticRoutes: device.routes.map((route) => ({
-      destination: route.destinationCidr,
-      nextHop: route.nextHop,
-    })),
+    staticRoutes: device.routes.map(serializeStaticRouteForAgent),
     validationIssues,
   }
 }

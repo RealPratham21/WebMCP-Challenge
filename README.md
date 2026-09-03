@@ -4,7 +4,7 @@ Browser-based IPv4 network simulation lab for the WebMCP Challenge.
 
 NetLab lets a human build a small topology of PCs and routers, configure addresses and static routes, and run deterministic ping/trace simulation against that live lab state. The same application actions are designed so a compatible AI agent can later inspect and interact with the exact same simulator through WebMCP.
 
-This repository currently ships the **human lab, simulation engine, and a first non-destructive WebMCP integration**. Compatible agents can inspect live topology, inspect one device, and run the same deterministic ping the human uses. Agents cannot yet change the network.
+This repository currently ships the **human lab, simulation engine, and WebMCP tools** that share the same Zustand snapshot. Compatible agents can inspect live topology, inspect one device, run the same deterministic ping the human uses, add or remove a static route, and highlight a device on the canvas. Agents cannot add or delete devices, change interfaces, or load presets.
 
 ## Motivation
 
@@ -22,7 +22,7 @@ The long-term idea is simple: if a human and an AI agent look at the same lab, t
 - Packet traces with hop-by-hop forwarding decisions
 - Two real presets: a working static-routing lab and a broken challenge lab
 - Application actions (`addDevice`, `runPing`, `configureInterface`, …) reused by the UI and by WebMCP tools
-- WebMCP tools: `get_topology`, `get_device_state`, `test_connectivity`
+- WebMCP tools: `get_topology`, `get_device_state`, `test_connectivity`, `add_static_route`, `remove_static_route`, `highlight_device`
 
 ## Screenshots
 
@@ -76,7 +76,7 @@ Pure simulator       (lib/simulator)
 - **Domain types** describe PCs, routers, interfaces, links, static routes, and simulation results.
 - **Lab state** lives in one Zustand store. React Flow nodes/edges are derived from that state, not stored as a second network copy.
 - **Simulation** is pure TypeScript. Given the same snapshot, `tracePacket()` and `runPing()` always return the same result.
-- **Application actions** such as `addDevice()`, `connectDevices()`, `configureInterface()`, `addStaticRoute()`, and `runPing()` are the operations both the UI and WebMCP tools call. This first WebMCP phase only exposes inspection and `runPing()`.
+- **Application actions** such as `addDevice()`, `connectDevices()`, `configureInterface()`, `addStaticRoute()`, and `runPing()` are the operations both the UI and WebMCP tools call. WebMCP currently exposes inspection, `runPing()`, static-route add/remove, and device selection. It does not expose device create/delete, linking, interface edits, or presets.
 
 ## Simulator design
 
@@ -205,23 +205,26 @@ Tests cover the pure simulator and lab actions, including:
 - Longest-prefix route selection
 - Disconnected topology
 - Routing loops and hop-limit handling
-- WebMCP topology/device serializers and connectivity adapter (uses the real `runPing` action)
+- WebMCP topology/device serializers and adapters (read tools plus static-route and highlight write tools that call existing lab actions)
 
 ## WebMCP
 
-NetLab progressively exposes its live simulator state to compatible AI agents using the WebMCP Imperative API (`document.modelContext.registerTool`). The human UI and the agent tools read and simulate against the **same centralized lab snapshot**. If the human adds a device or fixes a route, the next tool call sees that change immediately.
+NetLab progressively exposes its live simulator state to compatible AI agents using the WebMCP Imperative API (`document.modelContext.registerTool`). The human UI and the agent tools read and write through the **same application actions** into the same centralized lab snapshot. If the human or the agent changes a route, the next tool call and the inspector both see that change immediately.
 
-This first integration is intentionally **non-destructive**. Agents can understand the topology, inspect device configuration, and run deterministic connectivity tests. The human remains responsible for changing network configuration. There are no tools to add devices, edit IPs, or modify routes.
+Write tools are limited to static routes and device selection. There are still no tools to add or delete devices, connect links, edit interface addresses, set a default gateway, or load presets.
 
 ### Implemented tools
 
 | Tool | Purpose |
 | --- | --- |
 | `get_topology` | Returns every device and physical link in the current lab. Read-only. Use this first. |
-| `get_device_state` | Returns one PC or router’s live configuration (`deviceId` from `get_topology`). Read-only. |
+| `get_device_state` | Returns one PC or router’s live configuration (`deviceId` from `get_topology`), including stable static-route IDs. Read-only. |
 | `test_connectivity` | Runs the same deterministic bidirectional ping as **Run ping**. Updates the packet trace UI. Does not change topology or configuration. |
+| `add_static_route` | Adds one static route to an existing router. Use only when the user wants the configuration changed. Same action as the inspector. |
+| `remove_static_route` | Removes one static route by `routeId` (preferred) or `destination` + `nextHop`. Same action as the inspector. |
+| `highlight_device` | Selects a device on the canvas and opens its inspector. Does not change network configuration. |
 
-`test_connectivity` never lets the model decide reachability. It calls the existing simulator through `labApi.runPing()`.
+`test_connectivity` never lets the model decide reachability. It calls the existing simulator through `labApi.runPing()`. `add_static_route` and `remove_static_route` call `labApi.addStaticRoute()` / `labApi.removeStaticRoute()`. `highlight_device` calls `labApi.selectDevice()`.
 
 ### Local WebMCP testing
 
@@ -235,7 +238,7 @@ This first integration is intentionally **non-destructive**. Agents can understa
 await document.modelContext.getTools()
 ```
 
-You should see exactly `get_device_state`, `get_topology`, and `test_connectivity` (alphabetical). Then:
+You should see exactly these six tools (alphabetical): `add_static_route`, `get_device_state`, `get_topology`, `highlight_device`, `remove_static_route`, `test_connectivity`. Then:
 
 ```js
 const tools = await document.modelContext.getTools()
@@ -250,11 +253,20 @@ await document.modelContext.executeTool(
   ping,
   JSON.stringify({ sourceDeviceId: 'pc-1', destinationDeviceId: 'pc-2' }),
 )
+
+const highlight = tools.find((t) => t.name === 'highlight_device')
+await document.modelContext.executeTool(highlight, JSON.stringify({ deviceId: 'router-2' }))
+
+const addRoute = tools.find((t) => t.name === 'add_static_route')
+await document.modelContext.executeTool(
+  addRoute,
+  JSON.stringify({ deviceId: 'router-2', destination: '192.168.1.0/24', nextHop: '10.0.0.1' }),
+)
 ```
 
 Without the flag, NetLab still runs as a normal simulator. Tools are registered only when `document.modelContext` exists.
 
-Agent-driven topology modification is **not** implemented yet.
+Agent-driven topology edits (add/delete devices, connect links, change interface IPs) are **not** implemented.
 
 ## Current limitations
 
@@ -262,4 +274,4 @@ Agent-driven topology modification is **not** implemented yet.
 - One link between a pair of devices; PCs have a single interface
 - Save / Export in the toolbar are visual placeholders
 - No persistence, no multi-user labs, and no packet animation beyond hop highlighting
-- WebMCP tools are inspect-and-simulate only; agents cannot edit the lab yet
+- WebMCP cannot add/delete devices, connect links, edit interface IPs, set gateways, or load presets
