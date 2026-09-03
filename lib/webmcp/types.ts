@@ -1,5 +1,10 @@
 export type WebMcpErrorCode =
   | 'INVALID_DEVICE_ID'
+  | 'DEVICE_NOT_ROUTER'
+  | 'INVALID_CIDR'
+  | 'INVALID_NEXT_HOP'
+  | 'ROUTE_ALREADY_EXISTS'
+  | 'ROUTE_NOT_FOUND'
   | 'SOURCE_NOT_ENDPOINT'
   | 'DESTINATION_NOT_ENDPOINT'
   | 'INVALID_CONFIGURATION'
@@ -29,6 +34,12 @@ export interface AgentInterface {
 export interface AgentValidationIssue {
   field: string
   message: string
+}
+
+export interface AgentStaticRoute {
+  id: string
+  destination: string
+  nextHop: string
 }
 
 export interface AgentTopologyDevice {
@@ -70,14 +81,24 @@ export interface AgentRouterState {
   name: string
   type: 'router'
   interfaces: AgentInterface[]
-  staticRoutes: Array<{
-    destination: string
-    nextHop: string
-  }>
+  staticRoutes: AgentStaticRoute[]
   validationIssues: AgentValidationIssue[]
 }
 
 export type AgentDeviceState = AgentPcState | AgentRouterState
+
+export interface AgentRouteMutationResult {
+  ok: true
+  deviceId: string
+  deviceName: string
+  route: AgentStaticRoute
+}
+
+export interface AgentHighlightResult {
+  ok: true
+  deviceId: string
+  deviceName: string
+}
 
 export interface AgentEndpoint {
   id: string
@@ -115,4 +136,6 @@ export type AgentToolResult =
   | AgentTopology
   | AgentDeviceState
   | AgentConnectivityResult
+  | AgentRouteMutationResult
+  | AgentHighlightResult
   | AgentError
